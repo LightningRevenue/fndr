@@ -11,3 +11,6 @@ export { HistoryPage } from './HistoryPage';
 export { VerificationProgressPage } from './VerificationProgressPage';
 export { VerificationResultsPage } from './VerificationResultsPage';
 export { BulkCSVVerificationPage } from './BulkCSVVerificationPage';
+export { ValidEmailsPage } from './ValidEmailsPage';
+export { FindEmailPage } from './FindEmailPage';
+export { ProspectPage } from './ProspectPage';

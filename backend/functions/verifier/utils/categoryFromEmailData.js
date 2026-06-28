@@ -38,20 +38,50 @@ function categoryFromEmailData(emailObj) {
         (emailObj?.reachable === 'yes' || emailObj?.reachable === 'unknown') &&
         emailObj?.smtp?.catch_all === true
     ) {
-        return_obj.status = 'catch-all';
-        return_obj.reason = 'Provided email SMTP has Catch-All enabled.';
+        // If gravatar exists, the address is real despite catch-all server
+        if (emailObj?.gravatar?.hasGravatar === true) {
+            return_obj.status = 'valid';
+            return_obj.reason = 'Valid email confirmed via profile signal (catch-all server).';
+        } else {
+            return_obj.status = 'catch-all';
+            return_obj.reason = 'Provided email SMTP has Catch-All enabled.';
+        }
     } else if (emailObj?.smtp?.deliverable === false) {
-        return_obj.status = 'invalid';
-        return_obj.reason = 'Emails cannot be delivered to this email.';
+        const smtpDetail = emailObj?.smtp?.errorMsg?.details ?? '';
+        // 4xx = temporary SMTP error, not a permanent rejection
+        const isTemporary = /^\s*4\d\d/.test(smtpDetail);
+        if (isTemporary) {
+            return_obj.status = 'unverifiable';
+            return_obj.reason = `Temporary server error: ${smtpDetail}`;
+        } else {
+            return_obj.status = 'invalid';
+            return_obj.reason = smtpDetail
+                ? `Undeliverable: ${smtpDetail}`
+                : 'Emails cannot be delivered to this email.';
+        }
     } else if (emailObj?.disposable === true) {
         return_obj.status = 'invalid';
         return_obj.reason = 'This email is suspected to be a temporary email.';
     } else if (emailObj?.error === true) {
         return_obj.status = 'unverifiable';
-        return_obj.reason = "This email couldn't be verified!";
+        const smtpDetail = emailObj?.smtp?.errorMsg?.details;
+        if (smtpDetail && /greylist|greylisting|temporarily deferred|try again later|451/i.test(smtpDetail)) {
+            return_obj.reason = `Greylisted: ${smtpDetail} — retry may succeed.`;
+        } else {
+            return_obj.reason = smtpDetail
+                ? `Verification failed: ${smtpDetail}`
+                : "This email couldn't be verified!";
+        }
     } else {
         return_obj.status = 'unverifiable';
-        return_obj.reason = "This email couldn't be verified!";
+        const smtpDetail = emailObj?.smtp?.errorMsg?.details;
+        if (smtpDetail && /greylist|greylisting|temporarily deferred|try again later|451/i.test(smtpDetail)) {
+            return_obj.reason = `Greylisted: ${smtpDetail} — retry may succeed.`;
+        } else {
+            return_obj.reason = smtpDetail
+                ? `Verification failed: ${smtpDetail}`
+                : "This email couldn't be verified!";
+        }
     }
 
     return return_obj;

@@ -718,6 +718,54 @@ export const verificationApi = {
 };
 
 
+// Valid Emails DB
+
+export interface ValidEmailEntry {
+    email: string;
+    domain: string;
+    source: 'single' | 'csv' | 'api';
+    verified_at: number;
+}
+
+export interface ValidEmailsDomain {
+    domain: string;
+    count: number;
+}
+
+export interface ValidEmailsResponse {
+    success: boolean;
+    data: {
+        domains: ValidEmailsDomain[];
+        emails: ValidEmailEntry[];
+        total: number;
+    };
+}
+
+export const validEmailsApi = {
+    async getValidEmails(page = 1, perPage = 50, domain: string | null = null): Promise<ValidEmailsResponse['data']> {
+        try {
+            const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
+            if (domain) params.set('domain', domain);
+
+            const response = await axiosGet<ValidEmailsResponse>(
+                `${config.api.baseUrl}/api/verifier/valid-emails?${params.toString()}`
+            );
+
+            if (!response.success || !response.data) {
+                throw new Error(response.error instanceof Error ? response.error.message : response.error || 'Failed to fetch valid emails');
+            }
+
+            return response.data.data;
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Failed to fetch valid emails';
+            throw new Error(formatErrorMessage(errorMessage));
+        } finally {
+            // no-op
+        }
+    },
+};
+
+
 // API Key Management API Operations
 
 /**

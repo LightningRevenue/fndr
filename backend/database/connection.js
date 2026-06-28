@@ -116,17 +116,32 @@ function createTables(db) {
             )
         `);
 
+		// Valid emails ledger — persists across rebuilds
+		const createValidEmailsTable = db.prepare(`
+            CREATE TABLE IF NOT EXISTS valid_emails (
+                email TEXT PRIMARY KEY,
+                domain TEXT NOT NULL,
+                source TEXT CHECK(source IN ('single', 'csv', 'api')) NOT NULL,
+                verified_at INTEGER NOT NULL
+            )
+        `);
+
 		// Execute table creation
 		createVerificationRequestsTable.run();
 		createCsvUploadsTable.run();
 		createApiKeysTable.run();
+		createValidEmailsTable.run();
 
 		// Create indexes for better performance
 		const createCsvVerificationIndex = db.prepare(
 			'CREATE INDEX IF NOT EXISTS idx_csv_verification ON csv_uploads(verification_request_id)'
 		);
+		const createValidEmailsDomainIndex = db.prepare(
+			'CREATE INDEX IF NOT EXISTS idx_valid_emails_domain ON valid_emails(domain)'
+		);
 
 		createCsvVerificationIndex.run();
+		createValidEmailsDomainIndex.run();
 
 		console.log('Database tables created successfully');
 	} catch (error) {

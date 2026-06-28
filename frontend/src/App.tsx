@@ -15,7 +15,10 @@ import {
     HistoryPage,
     VerificationProgressPage,
     VerificationResultsPage,
-    BulkCSVVerificationPage
+    BulkCSVVerificationPage,
+    ValidEmailsPage,
+    FindEmailPage,
+    ProspectPage
 } from './pages';
 
 
@@ -101,6 +104,33 @@ export default function App() {
                             element={
                                 <ProtectedRoute>
                                     <HistoryPage />
+                                </ProtectedRoute>
+                            }
+                        />
+
+                        <Route
+                            path="/valid-emails"
+                            element={
+                                <ProtectedRoute>
+                                    <ValidEmailsPage />
+                                </ProtectedRoute>
+                            }
+                        />
+
+                        <Route
+                            path="/find-email"
+                            element={
+                                <ProtectedRoute>
+                                    <FindEmailPage />
+                                </ProtectedRoute>
+                            }
+                        />
+
+                        <Route
+                            path="/prospect"
+                            element={
+                                <ProtectedRoute>
+                                    <ProspectPage />
                                 </ProtectedRoute>
                             }
                         />

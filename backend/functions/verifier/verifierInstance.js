@@ -428,6 +428,7 @@ class VerifierInstance {
 												catch_all: resultObj.catch_all,
 												deliverable: resultObj.deliverable,
 												disabled: resultObj.disabled,
+												errorMsg: resultObj.errorMsg,
 											};
 
 											// if greylisted add to the greylistedEmails list

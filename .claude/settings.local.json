@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git commit -m \"$(cat <<''EOF''\nRemove hardcoded credentials from environment configuration\n\nReplaced hardcoded admin credentials with placeholder values in both\n.env.example and env.js default values:\n- Changed ADMIN_EMAIL from hardcoded email to placeholder\n- Changed ADMIN_PASSWORD from hardcoded password to placeholder\n\nThis improves security by removing actual credentials from version control\nand encourages users to set their own credentials.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
+      "Bash(git commit -m \"$(cat <<''EOF''\nRemove hardcoded credentials from environment configuration\n\nReplaced hardcoded admin credentials with placeholder values in both\n.env.example and env.js default values:\n- Changed ADMIN_EMAIL from hardcoded email to placeholder\n- Changed ADMIN_PASSWORD from hardcoded password to placeholder\n\nThis improves security by removing actual credentials from version control\nand encourages users to set their own credentials.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(docker *)",
+      "Bash(xargs grep -l \"transformResultsForAPI\\\\|status.*message\")",
+      "Bash(sqlite3 *)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(echo \"EXIT:$?\")"
     ],
     "deny": [],
     "ask": []

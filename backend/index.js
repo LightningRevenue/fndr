@@ -17,6 +17,7 @@ const passport = require('./functions/middleware/passport');
 const authRoutes = require('./routes/api/auth-simple');
 const verifierRoutes = require('./routes/api/verifier');
 const apiKeysRoutes = require('./routes/api/api-keys');
+const prospectRoutes = require('./routes/api/prospect');
 
 // Validate environment variables on startup
 validateEnvironment();
@@ -129,6 +130,9 @@ function setupRoutes() {
 
 		// API Keys routes
 		app.use('/api/api-keys', apiKeysRoutes);
+
+		// Prospect routes
+		app.use('/api/prospect', prospectRoutes);
 
 		// API health check
 		app.get('/api/health', (req, res) => {

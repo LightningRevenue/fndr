@@ -407,6 +407,94 @@ async function getCsvDetails(verification_request_id) {
 }
 
 
+/**
+ * Upsert valid emails into the valid_emails ledger
+ * @param {Array<{email: string, status: string, message: string}>} results
+ * @param {string} source - 'single' | 'csv' | 'api'
+ * @returns {void}
+ */
+function saveValidEmails(results, source) {
+	try {
+		const db = getDb();
+		const now = Date.now();
+
+		const stmt = db.prepare(`
+            INSERT INTO valid_emails (email, domain, source, verified_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(email) DO UPDATE SET
+                domain = excluded.domain,
+                source = excluded.source,
+                verified_at = excluded.verified_at
+        `);
+
+		const upsertMany = db.transaction((rows) => {
+			for (const row of rows) {
+				stmt.run(row.email, row.domain, source, now);
+			}
+		});
+
+		const validOnly = results
+			.filter(r => r.status === 'valid')
+			.map(r => ({ email: r.email, domain: r.email.split('@')[1] || '' }));
+
+		if (validOnly.length > 0) upsertMany(validOnly);
+
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		console.error('Save valid emails error:', errorMessage);
+	} finally {
+		console.debug('Save valid emails process completed');
+	}
+}
+
+
+/**
+ * Get all valid emails grouped by domain with pagination
+ * @param {number} page
+ * @param {number} perPage
+ * @param {string | null} domain - optional domain filter
+ * @returns {{ domains: Array<{domain: string, count: number}>, emails: Array<{email: string, domain: string, source: string, verified_at: number}>, total: number } | null}
+ */
+function getValidEmails(page = 1, perPage = 50, domain = null) {
+	try {
+		const db = getDb();
+		const offset = (page - 1) * perPage;
+
+		const domains = db.prepare(`
+            SELECT domain, COUNT(*) as count
+            FROM valid_emails
+            GROUP BY domain
+            ORDER BY count DESC, domain ASC
+        `).all();
+
+		const countStmt = domain
+			? db.prepare('SELECT COUNT(*) as total FROM valid_emails WHERE domain = ?')
+			: db.prepare('SELECT COUNT(*) as total FROM valid_emails');
+
+		const emailsStmt = domain
+			? db.prepare('SELECT email, domain, source, verified_at FROM valid_emails WHERE domain = ? ORDER BY verified_at DESC LIMIT ? OFFSET ?')
+			: db.prepare('SELECT email, domain, source, verified_at FROM valid_emails ORDER BY domain ASC, verified_at DESC LIMIT ? OFFSET ?');
+
+		/** @type {{total: number}} */
+		const countRow = domain ? countStmt.get(domain) : countStmt.get();
+		const total = countRow?.total ?? 0;
+
+		const emails = domain
+			? emailsStmt.all(domain, perPage, offset)
+			: emailsStmt.all(perPage, offset);
+
+		return { domains, emails, total };
+
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		console.error('Get valid emails error:', errorMessage);
+		return null;
+	} finally {
+		console.debug('Get valid emails process completed');
+	}
+}
+
+
 // Export functions
 module.exports = {
 	createVerificationRequest,
@@ -416,4 +504,6 @@ module.exports = {
 	getUserVerificationHistory,
 	getVerificationResultsPaginated,
 	getCsvDetails,
+	saveValidEmails,
+	getValidEmails,
 };

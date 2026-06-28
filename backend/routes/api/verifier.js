@@ -26,6 +26,8 @@ const {
 const { getVerificationStatus } = require('../../functions/route_fns/verify/verificationStatus');
 const { getVerificationResults } = require('../../functions/route_fns/verify/verificationResults');
 const { getHistory } = require('../../functions/route_fns/verify/verificationHistory');
+const { getValidEmails } = require('../../functions/route_fns/verify/verificationDB');
+const { findEmail } = require('../../functions/route_fns/verify/findEmail');
 const { checkPort25Connectivity } = require('../../functions/verifier/utils/checkPort25');
 const { MAX_CSV_SIZE_MB } = require('../../data/env');
 
@@ -43,6 +45,12 @@ const router = express.Router();
  * @returns {Promise<void>} Sends JSON response with verification request ID
  */
 router.post('/verify-single', isAuthenticated, verifySingleEmail);
+
+/**
+ * GET /api/verifier/find-email?firstName=&lastName=&domain=
+ * SSE stream — emits attempt/found/done events per pattern
+ */
+router.get('/find-email', isAuthenticated, findEmail);
 
 /**
  * POST /api/verifier/v1/verify
@@ -164,6 +172,33 @@ router.get('/csv/:csv_upload_id/download', isAuthenticated, downloadCSVResults);
  * @returns {Promise<void>} Sends JSON response with paginated history
  */
 router.get('/history', isAuthenticated, getHistory);
+
+/**
+ * GET /api/verifier/valid-emails
+ * Get all valid emails grouped by domain
+ * Query params: ?page=1&per_page=50&domain=example.com
+ */
+router.get('/valid-emails', isAuthenticated, (req, res) => {
+	try {
+		const page = Math.max(1, parseInt(String(req.query.page || '1'), 10));
+		const perPage = Math.min(200, Math.max(1, parseInt(String(req.query.per_page || '50'), 10)));
+		const domain = typeof req.query.domain === 'string' ? req.query.domain : null;
+
+		const data = getValidEmails(page, perPage, domain);
+
+		if (!data) {
+			return res.status(500).json({ success: false, message: 'Failed to retrieve valid emails' });
+		}
+
+		return res.json({ success: true, data });
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		console.error('Valid emails endpoint error:', errorMessage);
+		return res.status(500).json({ success: false, message: 'Internal server error' });
+	} finally {
+		console.debug('Valid emails endpoint process completed');
+	}
+});
 
 /**
  * GET /api/verifier/health

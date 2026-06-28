@@ -1461,6 +1461,18 @@ class SMTPVerificationSC {
 	}
 
 	/**
+	 * Generate honey probe addresses for catch-all detection
+	 * @param {string} domain
+	 * @returns {string[]} - 3 unique random emails that definitely don't exist
+	 */
+	static generateHoneyProbes(domain) {
+		return [0, 1, 2].map(() => {
+			const hex = uuidv4().replace(/-/g, '').substring(0, 8);
+			return `${hex}@${domain}`;
+		});
+	}
+
+	/**
 	 * Function to initiate disconnection from the client
 	 * @private
 	 * @param {boolean} ignoreTLS

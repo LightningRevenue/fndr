@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { LogOut, Key, History } from 'lucide-react';
+import { LogOut, Key, History, CheckCircle2, UserSearch, Building2 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Button } from '../ui';
@@ -150,6 +150,39 @@ export function DashboardLayout({
                                     >
                                         <History className="h-5 w-5" />
                                         <span className="hidden md:inline">History</span>
+                                    </Link>
+                                    <Link
+                                        to="/find-email"
+                                        className={`p-2.5 md:px-3 md:py-2 rounded-md text-sm font-medium transition-colors cursor-pointer flex items-center md:space-x-2 ${isActiveRoute('/find-email')
+                                            ? 'bg-gray-100 text-gray-900'
+                                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                            }`}
+                                        aria-label="Find Email"
+                                    >
+                                        <UserSearch className="h-5 w-5" />
+                                        <span className="hidden md:inline">Find Email</span>
+                                    </Link>
+                                    <Link
+                                        to="/prospect"
+                                        className={`p-2.5 md:px-3 md:py-2 rounded-md text-sm font-medium transition-colors cursor-pointer flex items-center md:space-x-2 ${isActiveRoute('/prospect')
+                                            ? 'bg-gray-100 text-gray-900'
+                                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                            }`}
+                                        aria-label="Prospect"
+                                    >
+                                        <Building2 className="h-5 w-5" />
+                                        <span className="hidden md:inline">Prospect</span>
+                                    </Link>
+                                    <Link
+                                        to="/valid-emails"
+                                        className={`p-2.5 md:px-3 md:py-2 rounded-md text-sm font-medium transition-colors cursor-pointer flex items-center md:space-x-2 ${isActiveRoute('/valid-emails')
+                                            ? 'bg-gray-100 text-gray-900'
+                                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                            }`}
+                                        aria-label="Valid Emails"
+                                    >
+                                        <CheckCircle2 className="h-5 w-5" />
+                                        <span className="hidden md:inline">Valid Emails</span>
                                     </Link>
                                 </nav>
 

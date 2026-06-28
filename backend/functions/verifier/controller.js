@@ -9,7 +9,7 @@ const stateVariables = require('../../data/stateVariables');
 const sqlAsync = require('../../database/sqlAsync');
 const antiGreylisting = require('./antiGreylisting');
 const { axiosGet, axiosPost } = require('../utils/axios');
-const { updateVerificationResults } = require('../route_fns/verify/verificationDB');
+const { updateVerificationResults, saveValidEmails } = require('../route_fns/verify/verificationDB');
 const StartupRecovery = require('../recovery/startupRecovery');
 const startupCoordination = require('../recovery/startupCoordination');
 const categoryFromEmailData = require('./utils/categoryFromEmailData');
@@ -548,6 +548,10 @@ class Controller {
 					const transformedResults = this.transformResultsForAPI(resultArr);
 					await updateVerificationResults(request_id, transformedResults);
 					this.logger.debug(`Request ${request_id} synced to verification_requests table`);
+
+					// Derive source type from request_id prefix (single-*, csv-*, api-*)
+					const source = request_id.startsWith('csv-') ? 'csv' : request_id.startsWith('api-') ? 'api' : 'single';
+					saveValidEmails(transformedResults, source);
 				} catch (error) {
 					this.logger.error(`Failed to sync results to verification_requests: ${error?.toString()}`);
 				}

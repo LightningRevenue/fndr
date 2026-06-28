@@ -215,6 +215,35 @@ class CatchAllCache {
 			await promiseAwait(0.5);
 		}
 	}
+
+	/**
+	 * Returns confidence tier string based on test_count and confidence score
+	 * @param {string} domain
+	 * @returns {Promise<'unverified'|'low'|'medium'|'high'>}
+	 */
+	async getCatchAllConfidenceLevel(domain) {
+		/** @type {'unverified'|'low'|'medium'|'high'} */
+		let tier = 'unverified';
+		await this.waitForReady();
+		try {
+			const sqlRes = await sqlAsync.getAsync(`SELECT * FROM ${this.table_name} WHERE domain = ?`, [domain]);
+
+			if (!sqlRes) return 'unverified';
+
+			/** @type {any} */
+			const obj = sqlRes;
+			const testCount = parseInt(obj?.test_count || 0, 10);
+			const confidence = parseInt(obj?.confidence || 0, 10);
+
+			if (testCount >= 3 && confidence >= 80) tier = 'high';
+			else if (testCount >= 2 && confidence >= 65) tier = 'medium';
+			else tier = 'low';
+		} catch (error) {
+			this.logger.error(`CatchAllCache getCatchAllConfidenceLevel() error -> ${error?.toString()}`);
+		} finally {
+			return tier;
+		}
+	}
 }
 
 const catchAllCache = new CatchAllCache();
