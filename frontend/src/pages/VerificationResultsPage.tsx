@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, DatabaseZap } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DashboardLayout } from '../components/layout';
 import { Button } from '../components/ui/Button';
@@ -13,6 +13,8 @@ import { ResultAnalysis } from '../components/results/ResultAnalysis';
 import { ResultsList } from '../components/results/ResultsList';
 import { Skeleton } from '../components/ui/Skeleton';
 import { verificationApi } from '../lib/api';
+import { config } from '../data/env';
+import { toast } from 'react-toastify';
 
 
 // ============================================================
@@ -69,6 +71,8 @@ export function VerificationResultsPage({
         catch_all: number;
         unknown: number;
     } | null>(null);
+
+    const [syncing, setSyncing] = useState(false);
 
     // Ref for intersection observer (using callback ref for better timing)
     const observerTarget = useRef<HTMLDivElement>(null);
@@ -342,7 +346,7 @@ export function VerificationResultsPage({
                 <div className="px-4 sm:px-6 lg:px-8 py-8">
                     {/* Header with back button */}
                     <div className="mb-8">
-                        <div className="flex items-center space-x-4">
+                        <div className="flex items-center justify-between">
                             <Button
                                 variant="ghost"
                                 size="sm"
@@ -352,6 +356,37 @@ export function VerificationResultsPage({
                                 <ArrowLeft className="h-4 w-4" />
                                 <span>Email Verifier</span>
                             </Button>
+
+                            {verificationRequestId && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={syncing}
+                                    className="flex items-center gap-1.5 cursor-pointer"
+                                    onClick={async () => {
+                                        try {
+                                            setSyncing(true);
+                                            const res = await fetch(
+                                                `${config.api.baseUrl}/api/verifier/valid-emails/sync/${verificationRequestId}`,
+                                                { method: 'POST', credentials: 'include' }
+                                            );
+                                            const json = await res.json() as { success: boolean; message: string; data?: { synced: number } };
+                                            if (json.success) {
+                                                toast.success(json.message);
+                                            } else {
+                                                toast.error(json.message || 'Sync failed');
+                                            }
+                                        } catch {
+                                            toast.error('Sync failed');
+                                        } finally {
+                                            setSyncing(false);
+                                        }
+                                    }}
+                                >
+                                    <DatabaseZap className="h-4 w-4" />
+                                    {syncing ? 'Saving…' : 'Save to contacts'}
+                                </Button>
+                            )}
                         </div>
                     </div>
 

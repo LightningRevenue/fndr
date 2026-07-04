@@ -9,6 +9,8 @@ import 'react-toastify/dist/ReactToastify.css';
 import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute';
 import {
     LoginPage,
+    RegisterPage,
+    PendingApprovalPage,
     DashboardPage,
     NotFoundPage,
     APIKeyPage,
@@ -70,6 +72,9 @@ export default function App() {
                                 </PublicRoute>
                             }
                         />
+
+                        <Route path="/register" element={<RegisterPage />} />
+                        <Route path="/pending-approval" element={<PendingApprovalPage />} />
 
                         {/* Protected routes (require authentication) */}
                         <Route

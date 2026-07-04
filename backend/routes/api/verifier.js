@@ -26,7 +26,7 @@ const {
 const { getVerificationStatus } = require('../../functions/route_fns/verify/verificationStatus');
 const { getVerificationResults } = require('../../functions/route_fns/verify/verificationResults');
 const { getHistory } = require('../../functions/route_fns/verify/verificationHistory');
-const { getValidEmails } = require('../../functions/route_fns/verify/verificationDB');
+const { getValidEmails, saveValidEmails, getVerificationRequest } = require('../../functions/route_fns/verify/verificationDB');
 const { findEmail } = require('../../functions/route_fns/verify/findEmail');
 const { checkPort25Connectivity } = require('../../functions/verifier/utils/checkPort25');
 const { MAX_CSV_SIZE_MB } = require('../../data/env');
@@ -183,8 +183,9 @@ router.get('/valid-emails', isAuthenticated, (req, res) => {
 		const page = Math.max(1, parseInt(String(req.query.page || '1'), 10));
 		const perPage = Math.min(200, Math.max(1, parseInt(String(req.query.per_page || '50'), 10)));
 		const domain = typeof req.query.domain === 'string' ? req.query.domain : null;
+		const emailStatus = typeof req.query.email_status === 'string' ? req.query.email_status : null;
 
-		const data = getValidEmails(page, perPage, domain);
+		const data = getValidEmails(page, perPage, domain, emailStatus);
 
 		if (!data) {
 			return res.status(500).json({ success: false, message: 'Failed to retrieve valid emails' });
@@ -197,6 +198,153 @@ router.get('/valid-emails', isAuthenticated, (req, res) => {
 		return res.status(500).json({ success: false, message: 'Internal server error' });
 	} finally {
 		console.debug('Valid emails endpoint process completed');
+	}
+});
+
+
+/**
+ * PATCH /api/verifier/valid-emails/:email/personal
+ * Save personal email for a contact
+ */
+router.patch('/valid-emails/:email/personal', isAuthenticated, (req, res) => {
+	try {
+		const { email } = req.params;
+		const { personal_email } = req.body;
+
+		if (!personal_email || typeof personal_email !== 'string') {
+			return res.status(400).json({ success: false, message: 'personal_email is required' });
+		}
+
+		const { getDb } = require('../../database/connection');
+		const db = getDb();
+		db.prepare('UPDATE valid_emails SET personal_email = ? WHERE email = ?').run(personal_email.trim(), email);
+
+		return res.json({ success: true });
+	} catch (error) {
+		console.error('Save personal email error:', error instanceof Error ? error.message : String(error));
+		return res.status(500).json({ success: false, message: 'Internal server error' });
+	} finally {
+		console.debug('Save personal email process completed');
+	}
+});
+
+
+/**
+ * PATCH /api/verifier/valid-emails/:email/contact
+ * Update any contact fields (job_title, company_name, linkedin_url, phone, city, country, tags, notes, first_name, last_name, personal_email)
+ */
+router.patch('/valid-emails/:email/contact', isAuthenticated, (req, res) => {
+	try {
+		const { email } = req.params;
+		const ALLOWED = ['first_name','last_name','personal_email','job_title','company_name','linkedin_url','phone','city','country','tags','notes'];
+
+		const updates = Object.entries(req.body).filter(([k]) => ALLOWED.includes(k));
+		if (updates.length === 0) {
+			return res.status(400).json({ success: false, message: 'No valid fields provided' });
+		}
+
+		const { getDb } = require('../../database/connection');
+		const db = getDb();
+		const set = updates.map(([k]) => `${k} = ?`).join(', ');
+		const values = [...updates.map(([, v]) => v), email];
+		db.prepare(`UPDATE valid_emails SET ${set} WHERE email = ?`).run(...values);
+
+		return res.json({ success: true });
+	} catch (error) {
+		console.error('Update contact error:', error instanceof Error ? error.message : String(error));
+		return res.status(500).json({ success: false, message: 'Internal server error' });
+	} finally {
+		console.debug('Update contact process completed');
+	}
+});
+
+
+/**
+ * POST /api/verifier/valid-emails/sync/:verification_request_id
+ * Re-save valid + catch-all emails from a completed verification into the contacts ledger.
+ * Useful for back-filling results that were completed before catch-all saving was enabled.
+ */
+router.post('/valid-emails/sync/:verification_request_id', isAuthenticated, async (req, res) => {
+	try {
+		const { verification_request_id } = req.params;
+
+		const vr = await getVerificationRequest(verification_request_id);
+		if (!vr) {
+			return res.status(404).json({ success: false, message: 'Verification request not found' });
+		}
+		if (vr.status !== 'completed') {
+			return res.status(400).json({ success: false, message: 'Verification is not completed yet' });
+		}
+
+		const results = Array.isArray(vr.emails) ? vr.emails : [];
+		const source = verification_request_id.startsWith('csv-') ? 'csv'
+			: verification_request_id.startsWith('api-') ? 'api' : 'single';
+
+		saveValidEmails(results, source, { requestId: verification_request_id });
+
+		const saved = results.filter(r => {
+			const s = r.status;
+			return s === 'valid' || s === 'catch-all' || s === 'catch_all' || s === 'catchall';
+		}).length;
+
+		return res.json({ success: true, message: `Synced ${saved} contacts`, data: { synced: saved } });
+	} catch (error) {
+		console.error('Sync valid emails error:', error instanceof Error ? error.message : String(error));
+		return res.status(500).json({ success: false, message: 'Internal server error' });
+	} finally {
+		console.debug('Sync valid emails process completed');
+	}
+});
+
+
+/**
+ * GET /api/verifier/domain-description?domain=example.com
+ * Fetch og:description from a domain's homepage — cached in memory for the session
+ */
+const _descCache = /** @type {Map<string, string>} */ (new Map());
+
+router.get('/domain-description', isAuthenticated, async (req, res) => {
+	try {
+		const domain = typeof req.query.domain === 'string' ? req.query.domain.trim() : '';
+		if (!domain) return res.json({ success: true, data: { description: '' } });
+
+		if (_descCache.has(domain)) {
+			return res.json({ success: true, data: { description: _descCache.get(domain) } });
+		}
+
+		const https = require('https');
+		const http  = require('http');
+
+		const fetchDesc = (url) => new Promise((resolve) => {
+			try {
+				const mod = url.startsWith('https') ? https : http;
+				const req2 = mod.get(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html' }, timeout: 6000 }, (r) => {
+					// follow one redirect
+					if ((r.statusCode === 301 || r.statusCode === 302) && r.headers.location) {
+						return fetchDesc(r.headers.location).then(resolve);
+					}
+					let html = '';
+					r.on('data', (c) => { if (html.length < 50000) html += c; });
+					r.on('end', () => {
+						const m = /<meta[^>]+(?:name="description"|property="og:description")[^>]*content="([^"]{10,300})"/i.exec(html)
+							   || /<meta[^>]+content="([^"]{10,300})"[^>]+(?:name="description"|property="og:description")/i.exec(html);
+						resolve(m ? m[1].trim() : '');
+					});
+				});
+				req2.on('error', () => resolve(''));
+				req2.setTimeout(6000, () => { req2.destroy(); resolve(''); });
+			} catch (_) { resolve(''); }
+		});
+
+		const desc = /** @type {string} */ (await fetchDesc(`https://${domain}`));
+		_descCache.set(domain, desc);
+
+		return res.json({ success: true, data: { description: desc } });
+	} catch (error) {
+		console.error('Domain description error:', error instanceof Error ? error.message : String(error));
+		return res.json({ success: true, data: { description: '' } });
+	} finally {
+		console.debug('Domain description process completed');
 	}
 });
 

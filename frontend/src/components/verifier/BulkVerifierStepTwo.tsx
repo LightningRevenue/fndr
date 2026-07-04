@@ -1,19 +1,34 @@
 /**
  * Bulk Verifier Step Two Component
- * Column selection for email verification
+ * Column selection and field mapping for email verification
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Mail, Info, AlertTriangle } from 'lucide-react';
+import { Mail, Info, AlertTriangle, MapPin } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card, CardContent } from '../ui/Card';
 import type { CSVFullDataResult } from '../../lib/csvParser';
 
 
+// Field mapping configuration
+const FIELD_DEFINITIONS: { key: string; label: string; hints: string[] }[] = [
+    { key: 'first_name',   label: 'First Name',        hints: ['first_name', 'first', 'firstname', 'given_name'] },
+    { key: 'last_name',    label: 'Last Name',         hints: ['last_name', 'last', 'lastname', 'surname', 'family_name'] },
+    { key: 'phone',        label: 'Phone',             hints: ['phone', 'phone_number', 'phonenumber', 'mobile', 'tel', 'telephone'] },
+    { key: 'linkedin_url', label: 'LinkedIn URL',      hints: ['linkedin', 'linkedin_url', 'profile_url', 'linkedin_profile'] },
+    { key: 'job_title',    label: 'Job Title / Role',  hints: ['job_title', 'title', 'role', 'position', 'jobtitle'] },
+    { key: 'company_name', label: 'Company',           hints: ['company', 'company_name', 'organization', 'org', 'employer'] },
+];
+
+
+// Normalize header for hint matching (lowercase, collapse spaces/underscores)
+const normalizeHint = (s: string): string => s.toLowerCase().replace(/[\s_]+/g, '_');
+
+
 // Interface for component props
 interface BulkVerifierStepTwoProps {
     parsedData: CSVFullDataResult;
-    onVerify: (selectedColumn: string) => void;
+    onVerify: (selectedColumn: string, fieldMapping: Record<string, number>) => void;
     isVerifying?: boolean;
 }
 
@@ -47,6 +62,26 @@ export function BulkVerifierStepTwo({
 
     // Ref for the detected column to scroll into view
     const detectedColumnRef = useRef<HTMLTableCellElement>(null);
+
+
+    // Auto-detect field mapping: for each field, find the first header that matches a hint
+    const autoDetectMapping = (): Record<string, string> => {
+        const result: Record<string, string> = {};
+        for (const field of FIELD_DEFINITIONS) {
+            const match = parsedData.headers.find(h =>
+                field.hints.includes(normalizeHint(h))
+            );
+            if (match !== undefined) {
+                result[field.key] = String(parsedData.headers.indexOf(match));
+            } else {
+                result[field.key] = '';
+            }
+        }
+        return result;
+    };
+
+    // fieldMapping values are column index as string, or '' to skip
+    const [fieldMapping, setFieldMapping] = useState<Record<string, string>>(autoDetectMapping);
 
 
     // Auto-scroll to detected column on mount
@@ -83,9 +118,16 @@ export function BulkVerifierStepTwo({
                 return;
             }
 
+            // Build numeric field mapping — only include non-skip entries
+            const numericMapping: Record<string, number> = {};
+            for (const [key, val] of Object.entries(fieldMapping)) {
+                if (val !== '') {
+                    numericMapping[key] = parseInt(val, 10);
+                }
+            }
+
             // Backend will extract emails from the uploaded CSV using the selected column
-            // No need to extract emails on frontend since file is already uploaded
-            onVerify(selectedColumn);
+            onVerify(selectedColumn, numericMapping);
         } catch (error) {
             console.error('Verify emails error:', error);
         }
@@ -225,6 +267,46 @@ export function BulkVerifierStepTwo({
                     *Select the column with most unique and valid syntax emails.
                 </p>
             </div>
+
+
+            {/* Field mapping section */}
+            <Card>
+                <CardContent className="p-6">
+                    <div className="flex items-center space-x-2 text-[#2F327D] mb-4">
+                        <MapPin className="h-5 w-5" />
+                        <h3 className="font-semibold">Map additional fields <span className="text-sm font-normal text-gray-500">(optional)</span></h3>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {FIELD_DEFINITIONS.map((field) => (
+                            <div key={field.key} className="flex flex-col space-y-1">
+                                <label
+                                    htmlFor={`field-map-${field.key}`}
+                                    className="text-xs font-medium text-gray-600 cursor-pointer"
+                                >
+                                    {field.label}
+                                </label>
+                                <select
+                                    id={`field-map-${field.key}`}
+                                    value={fieldMapping[field.key] ?? ''}
+                                    onChange={(e) =>
+                                        setFieldMapping((prev) => ({ ...prev, [field.key]: e.target.value }))
+                                    }
+                                    className="text-sm border border-gray-200 rounded-md px-3 py-2 bg-white text-gray-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 transition-colors duration-200 hover:border-gray-300"
+                                >
+                                    <option value="">— skip —</option>
+                                    {parsedData.headers.map((header, idx) => (
+                                        <option key={idx} value={String(idx)}>
+                                            {header}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
+
 
             {/* Action buttons */}
             <div className="flex justify-end">

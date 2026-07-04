@@ -411,33 +411,70 @@ async function getCsvDetails(verification_request_id) {
  * Upsert valid emails into the valid_emails ledger
  * @param {Array<{email: string, status: string, message: string}>} results
  * @param {string} source - 'single' | 'csv' | 'api'
+ * @param {{firstName?: string, lastName?: string, requestId?: string}} [meta] - optional metadata
  * @returns {void}
  */
-function saveValidEmails(results, source) {
+function saveValidEmails(results, source, meta = {}) {
 	try {
 		const db = getDb();
 		const now = Date.now();
 
+		// Load per-email contact data from csv_uploads when requestId is provided
+		/** @type {Record<string, Record<string, string>>} */
+		let contactMap = {};
+		if (meta.requestId) {
+			const row = /** @type {{contact_data: string | null} | undefined} */ (
+				db.prepare('SELECT contact_data FROM csv_uploads WHERE verification_request_id = ?').get(meta.requestId)
+			);
+			if (row?.contact_data) {
+				try { contactMap = JSON.parse(row.contact_data); } catch (_) { /* malformed json, skip */ }
+			}
+		}
+
+		const CONTACT_FIELDS = ['first_name', 'last_name', 'phone', 'linkedin_url', 'job_title', 'company_name'];
+
 		const stmt = db.prepare(`
-            INSERT INTO valid_emails (email, domain, source, verified_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO valid_emails (email, domain, source, verified_at, first_name, last_name, email_status)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(email) DO UPDATE SET
                 domain = excluded.domain,
                 source = excluded.source,
-                verified_at = excluded.verified_at
+                verified_at = excluded.verified_at,
+                email_status = excluded.email_status,
+                first_name = COALESCE(excluded.first_name, first_name),
+                last_name  = COALESCE(excluded.last_name,  last_name)
         `);
 
 		const upsertMany = db.transaction((rows) => {
 			for (const row of rows) {
-				stmt.run(row.email, row.domain, source, now);
+				stmt.run(row.email, row.domain, source, now, meta.firstName ?? null, meta.lastName ?? null, row.email_status);
+
+				// Apply extra contact fields from CSV mapping if available
+				const extra = contactMap[row.email];
+				if (extra) {
+					const updates = CONTACT_FIELDS.filter(f => extra[f]);
+					if (updates.length > 0) {
+						const set = updates.map(f => `${f} = COALESCE(${f}, ?)`).join(', ');
+						const vals = [...updates.map(f => extra[f]), row.email];
+						db.prepare(`UPDATE valid_emails SET ${set} WHERE email = ?`).run(...vals);
+					}
+				}
 			}
 		});
 
-		const validOnly = results
-			.filter(r => r.status === 'valid')
-			.map(r => ({ email: r.email, domain: r.email.split('@')[1] || '' }));
+		// Normalize status: controller emits 'catch-all' (hyphen), normalize to 'catch_all'
+		const normalizeStatus = (s) => (s === 'catch-all' || s === 'catchall') ? 'catch_all' : s;
 
-		if (validOnly.length > 0) upsertMany(validOnly);
+		// Save both valid and catch-all emails
+		const toSave = results
+			.filter(r => normalizeStatus(r.status) === 'valid' || normalizeStatus(r.status) === 'catch_all')
+			.map(r => ({
+				email: r.email,
+				domain: r.email.split('@')[1] || '',
+				email_status: normalizeStatus(r.status),
+			}));
+
+		if (toSave.length > 0) upsertMany(toSave);
 
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
@@ -453,12 +490,21 @@ function saveValidEmails(results, source) {
  * @param {number} page
  * @param {number} perPage
  * @param {string | null} domain - optional domain filter
- * @returns {{ domains: Array<{domain: string, count: number}>, emails: Array<{email: string, domain: string, source: string, verified_at: number}>, total: number } | null}
+ * @returns {{ domains: Array<{domain: string, count: number}>, emails: Array<{email: string, domain: string, source: string, verified_at: number, first_name: string|null, last_name: string|null, personal_email: string|null}>, total: number } | null}
  */
-function getValidEmails(page = 1, perPage = 50, domain = null) {
+function getValidEmails(page = 1, perPage = 50, domain = null, emailStatus = null) {
 	try {
 		const db = getDb();
 		const offset = (page - 1) * perPage;
+
+		// Build WHERE clause dynamically
+		/** @type {string[]} */
+		const whereParts = [];
+		/** @type {(string | number)[]} */
+		const whereArgs = [];
+		if (domain) { whereParts.push('domain = ?'); whereArgs.push(domain); }
+		if (emailStatus) { whereParts.push('email_status = ?'); whereArgs.push(emailStatus); }
+		const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
 
 		const domains = db.prepare(`
             SELECT domain, COUNT(*) as count
@@ -467,21 +513,17 @@ function getValidEmails(page = 1, perPage = 50, domain = null) {
             ORDER BY count DESC, domain ASC
         `).all();
 
-		const countStmt = domain
-			? db.prepare('SELECT COUNT(*) as total FROM valid_emails WHERE domain = ?')
-			: db.prepare('SELECT COUNT(*) as total FROM valid_emails');
-
-		const emailsStmt = domain
-			? db.prepare('SELECT email, domain, source, verified_at FROM valid_emails WHERE domain = ? ORDER BY verified_at DESC LIMIT ? OFFSET ?')
-			: db.prepare('SELECT email, domain, source, verified_at FROM valid_emails ORDER BY domain ASC, verified_at DESC LIMIT ? OFFSET ?');
-
 		/** @type {{total: number}} */
-		const countRow = domain ? countStmt.get(domain) : countStmt.get();
+		const countRow = db.prepare(`SELECT COUNT(*) as total FROM valid_emails ${where}`).get(...whereArgs);
 		const total = countRow?.total ?? 0;
 
-		const emails = domain
-			? emailsStmt.all(domain, perPage, offset)
-			: emailsStmt.all(perPage, offset);
+		const emails = db.prepare(
+			`SELECT email, domain, source, verified_at, first_name, last_name, personal_email,
+			        job_title, company_name, linkedin_url, phone, city, country, tags, notes, email_status
+			 FROM valid_emails ${where}
+			 ORDER BY ${domain ? 'verified_at DESC' : 'domain ASC, verified_at DESC'}
+			 LIMIT ? OFFSET ?`
+		).all(...whereArgs, perPage, offset);
 
 		return { domains, emails, total };
 

@@ -43,9 +43,23 @@ export function APIKeyPage() {
     const [newKey, setNewKey] = React.useState<string>('');
     const [copiedKeyId, setCopiedKeyId] = React.useState<string>('');
 
+    // Bright Data key state
+    const [brightdataKey, setBrightdataKey] = React.useState('');
+    const [brightdataKeyMasked, setBrightdataKeyMasked] = React.useState('');
+    const [brightdataKeyIsSet, setBrightdataKeyIsSet] = React.useState(false);
+    const [brightdataKeySaving, setBrightdataKeySaving] = React.useState(false);
+
+    // Bright Data SERP key state
+    const [serpKey, setSerpKey] = React.useState('');
+    const [serpKeyMasked, setSerpKeyMasked] = React.useState('');
+    const [serpKeyIsSet, setSerpKeyIsSet] = React.useState(false);
+    const [serpKeySaving, setSerpKeySaving] = React.useState(false);
+
     // Load keys on mount and whenever we navigate to this page
     React.useEffect(() => {
         loadKeys();
+        loadBrightdataKey();
+        loadSerpKey();
     }, [location.pathname]);
 
     // Also reload when page becomes visible again (handles browser tab switching)
@@ -62,6 +76,78 @@ export function APIKeyPage() {
         };
     }, []);
 
+
+    const loadSerpKey = async () => {
+        try {
+            const res = await fetch('/api/settings/brightdata-serp-key', { credentials: 'include' });
+            const data = await res.json() as { success: boolean; data: { isSet: boolean; masked: string } };
+            if (data.success) {
+                setSerpKeyIsSet(data.data.isSet);
+                setSerpKeyMasked(data.data.masked);
+            }
+        } catch (_) { /* silent */ }
+    };
+
+    const handleSaveSerpKey = async () => {
+        if (!serpKey.trim()) return;
+        setSerpKeySaving(true);
+        try {
+            const res = await fetch('/api/settings/brightdata-serp-key', {
+                method: 'PATCH',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: serpKey.trim() }),
+            });
+            const data = await res.json() as { success: boolean; message: string };
+            if (data.success) {
+                toast.success('Bright Data SERP key saved');
+                setSerpKey('');
+                await loadSerpKey();
+            } else {
+                toast.error(data.message);
+            }
+        } catch (_) {
+            toast.error('Failed to save key');
+        } finally {
+            setSerpKeySaving(false);
+        }
+    };
+
+    const loadBrightdataKey = async () => {
+        try {
+            const res = await fetch('/api/settings/brightdata-api-key', { credentials: 'include' });
+            const data = await res.json() as { success: boolean; data: { isSet: boolean; masked: string } };
+            if (data.success) {
+                setBrightdataKeyIsSet(data.data.isSet);
+                setBrightdataKeyMasked(data.data.masked);
+            }
+        } catch (_) { /* silent */ }
+    };
+
+    const handleSaveBrightdataKey = async () => {
+        if (!brightdataKey.trim()) return;
+        setBrightdataKeySaving(true);
+        try {
+            const res = await fetch('/api/settings/brightdata-api-key', {
+                method: 'PATCH',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: brightdataKey.trim() }),
+            });
+            const data = await res.json() as { success: boolean; message: string };
+            if (data.success) {
+                toast.success('Bright Data key saved');
+                setBrightdataKey('');
+                await loadBrightdataKey();
+            } else {
+                toast.error(data.message);
+            }
+        } catch (_) {
+            toast.error('Failed to save key');
+        } finally {
+            setBrightdataKeySaving(false);
+        }
+    };
 
     const loadKeys = async () => {
         try {
@@ -488,6 +574,87 @@ export function APIKeyPage() {
                                     ))}
                                 </div>
                             )}
+                        </CardContent>
+                    </Card>
+                </motion.div>
+
+                {/* Integrations */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.15 }}
+                    className="mt-6"
+                >
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center space-x-2">
+                                <Key className="h-5 w-5" />
+                                <span>Integrations</span>
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div>
+                                <p className="text-sm font-medium text-gray-900 mb-1">Bright Data Key</p>
+                                <p className="text-xs text-gray-500 mb-3">
+                                    Used for LinkedIn profile scraping (brightdata.com).
+                                    {brightdataKeyIsSet && (
+                                        <span className="ml-2 text-green-600 font-medium">
+                                            ✓ Set: {brightdataKeyMasked}
+                                        </span>
+                                    )}
+                                </p>
+                                <div className="flex items-center space-x-2">
+                                    <Input
+                                        type="password"
+                                        placeholder={brightdataKeyIsSet ? 'Enter new key to rotate...' : 'Paste your Bright Data key...'}
+                                        value={brightdataKey}
+                                        onChange={(e) => setBrightdataKey(e.target.value)}
+                                        fullWidth
+                                    />
+                                    <Button
+                                        variant="primary"
+                                        onClick={handleSaveBrightdataKey}
+                                        disabled={brightdataKeySaving || !brightdataKey.trim()}
+                                        loading={brightdataKeySaving}
+                                        className="cursor-pointer flex-shrink-0"
+                                    >
+                                        {brightdataKeyIsSet ? 'Rotate' : 'Save'}
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <hr className="border-gray-100" />
+
+                            <div>
+                                <p className="text-sm font-medium text-gray-900 mb-1">Bright Data SERP Key</p>
+                                <p className="text-xs text-gray-500 mb-3">
+                                    Used for LinkedIn people search (zone: serp_api1).
+                                    {serpKeyIsSet && (
+                                        <span className="ml-2 text-green-600 font-medium">
+                                            ✓ Set: {serpKeyMasked}
+                                        </span>
+                                    )}
+                                </p>
+                                <div className="flex items-center space-x-2">
+                                    <Input
+                                        type="password"
+                                        placeholder={serpKeyIsSet ? 'Enter new key to rotate...' : 'Paste your SERP API key...'}
+                                        value={serpKey}
+                                        onChange={(e) => setSerpKey(e.target.value)}
+                                        fullWidth
+                                    />
+                                    <Button
+                                        variant="primary"
+                                        onClick={handleSaveSerpKey}
+                                        disabled={serpKeySaving || !serpKey.trim()}
+                                        loading={serpKeySaving}
+                                        className="cursor-pointer flex-shrink-0"
+                                    >
+                                        {serpKeyIsSet ? 'Rotate' : 'Save'}
+                                    </Button>
+                                </div>
+                            </div>
+
                         </CardContent>
                     </Card>
                 </motion.div>

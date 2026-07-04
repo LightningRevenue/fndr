@@ -7,6 +7,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
 import { Mail, Lock } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Button, Input } from '../ui';
 import {
     loginSchema,
@@ -88,6 +89,13 @@ export function LoginForm({
                         Sign in
                     </Button>
                 </form>
+
+                <p className="text-center text-sm text-gray-500">
+                    Don't have an account?{' '}
+                    <Link to="/register" className="text-indigo-600 hover:text-indigo-700 font-medium cursor-pointer">
+                        Create one
+                    </Link>
+                </p>
             </motion.div>
         );
     } catch (error) {

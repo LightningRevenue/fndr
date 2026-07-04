@@ -18,6 +18,7 @@ const authRoutes = require('./routes/api/auth-simple');
 const verifierRoutes = require('./routes/api/verifier');
 const apiKeysRoutes = require('./routes/api/api-keys');
 const prospectRoutes = require('./routes/api/prospect');
+const settingsRoutes = require('./routes/api/settings');
 
 // Validate environment variables on startup
 validateEnvironment();
@@ -133,6 +134,9 @@ function setupRoutes() {
 
 		// Prospect routes
 		app.use('/api/prospect', prospectRoutes);
+
+		// Settings routes
+		app.use('/api/settings', settingsRoutes);
 
 		// API health check
 		app.get('/api/health', (req, res) => {

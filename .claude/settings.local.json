@@ -7,7 +7,13 @@
       "Bash(sqlite3 *)",
       "Bash(npx tsc *)",
       "Bash(echo \"Exit code: $?\")",
-      "Bash(echo \"EXIT:$?\")"
+      "Bash(echo \"EXIT:$?\")",
+      "Skill(run)",
+      "WebFetch(domain:clay.com)",
+      "WebFetch(domain:www.figma.com)",
+      "Bash(cat docker-compose.yml)",
+      "Bash(cat docker-compose.yaml)",
+      "Bash(xargs grep -l \"auth\\\\|login\\\\|user\")"
     ],
     "deny": [],
     "ask": []

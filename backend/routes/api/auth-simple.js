@@ -1,6 +1,5 @@
 /**
  * Authentication routes with session management
- * Single admin user with credentials in .env file
  * Uses Passport.js for session-based authentication
  */
 
@@ -10,7 +9,76 @@ const router = express.Router();
 // Import auth handlers and middleware
 const { handleAuth } = require('../../functions/route_fns/simpleAuth/login');
 const { handleLogout } = require('../../functions/route_fns/simpleAuth/logout');
+const { handleRegister } = require('../../functions/route_fns/simpleAuth/register');
 const { isAuthenticated } = require('../../functions/middleware/authenticate');
+
+/**
+ * POST /api/auth/register
+ * Create a new user account. First user is auto-approved admin.
+ */
+router.post('/register', handleRegister);
+
+/**
+ * GET /api/auth/pending-users
+ * Admin only — list users waiting for approval
+ */
+router.get('/pending-users', isAuthenticated, (req, res) => {
+    try {
+        if (!req.user?.is_admin) {
+            return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+        const { getDb } = require('../../database/connection');
+        const db = getDb();
+        const users = db.prepare(
+            "SELECT id, email, status, is_admin, created_at FROM users WHERE status = 'pending' ORDER BY created_at ASC"
+        ).all();
+        return res.json({ success: true, data: { users } });
+    } catch (error) {
+        console.error('Pending users error:', error);
+        return res.status(500).json({ success: false, message: 'Failed to load pending users' });
+    }
+});
+
+/**
+ * POST /api/auth/approve/:id
+ * Admin only — approve a pending user
+ */
+router.post('/approve/:id', isAuthenticated, (req, res) => {
+    try {
+        if (!req.user?.is_admin) {
+            return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+        const { getDb } = require('../../database/connection');
+        const db = getDb();
+        const result = db.prepare("UPDATE users SET status = 'approved' WHERE id = ? AND status = 'pending'").run(req.params.id);
+        if (result.changes === 0) {
+            return res.status(404).json({ success: false, message: 'User not found or already approved' });
+        }
+        return res.json({ success: true, message: 'User approved' });
+    } catch (error) {
+        console.error('Approve user error:', error);
+        return res.status(500).json({ success: false, message: 'Failed to approve user' });
+    }
+});
+
+/**
+ * POST /api/auth/reject/:id
+ * Admin only — reject/delete a pending user
+ */
+router.post('/reject/:id', isAuthenticated, (req, res) => {
+    try {
+        if (!req.user?.is_admin) {
+            return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+        const { getDb } = require('../../database/connection');
+        const db = getDb();
+        db.prepare("DELETE FROM users WHERE id = ? AND status = 'pending'").run(req.params.id);
+        return res.json({ success: true, message: 'User rejected' });
+    } catch (error) {
+        console.error('Reject user error:', error);
+        return res.status(500).json({ success: false, message: 'Failed to reject user' });
+    }
+});
 
 /**
  * POST /api/auth/login
@@ -38,6 +106,7 @@ router.get('/me', isAuthenticated, (req, res) => {
 			data: {
 				user: {
 					email: req.user.email,
+					is_admin: Boolean(req.user.is_admin),
 				},
 			},
 		});

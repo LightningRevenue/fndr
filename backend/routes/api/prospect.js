@@ -9,6 +9,8 @@ const express = require('express');
 const { isAuthenticated } = require('../../functions/middleware/authenticate');
 const { searchPlaces, getPlaceDetails } = require('../../functions/route_fns/prospect/googleMaps');
 const { findOwner, extractDomain } = require('../../functions/route_fns/prospect/serpScraper');
+const { scrapeLinkedInProfile } = require('../../functions/route_fns/prospect/linkedinScraper');
+const { searchLinkedInProfiles } = require('../../functions/route_fns/prospect/linkedinSearch');
 
 const router = express.Router();
 
@@ -175,5 +177,82 @@ router.post('/company-search',
     }
 );
 
+
+/**
+ * POST /api/prospect/linkedin-profile
+ * Scrape a LinkedIn profile via ScraperAPI → name, role, domain
+ * Body: { profileUrl: string }
+ */
+router.post('/linkedin-profile',
+
+    /** @type {import('express').RequestHandler} */
+    async (req, res) => {
+        try {
+            const { profileUrl } = /** @type {{ profileUrl: string }} */ (req.body);
+
+            if (!profileUrl || !profileUrl.includes('linkedin.com/in/')) {
+                res.status(400).json({ success: false, message: 'Valid LinkedIn profile URL is required' });
+                return;
+            }
+
+            const apiKey = process.env.BRIGHTDATA_API_KEY || '';
+            if (!apiKey) {
+                res.status(500).json({ success: false, message: 'Bright Data API key not configured. Set it in API Keys → Integrations.' });
+                return;
+            }
+
+            const data = await scrapeLinkedInProfile(profileUrl, apiKey);
+            res.json({ success: true, data });
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'LinkedIn scrape failed';
+            // Log full axios error response for debugging
+            const axiosResp = /** @type {Record<string, unknown>} */ (err)?.response;
+            if (axiosResp) console.error('POST /api/prospect/linkedin-profile axios response:', JSON.stringify(/** @type {Record<string, unknown>} */ (axiosResp)?.data ?? /** @type {Record<string, unknown>} */ (axiosResp)?.status));
+            console.error('POST /api/prospect/linkedin-profile error:', message);
+            res.status(500).json({ success: false, message });
+        } finally {
+            console.debug('POST /api/prospect/linkedin-profile completed');
+        }
+    }
+);
+
+
+/**
+ * POST /api/prospect/linkedin-search
+ * Search LinkedIn profiles by job title + location via Bright Data SERP
+ * Body: { jobTitle: string, location?: string }
+ */
+router.post('/linkedin-search',
+
+    /** @type {import('express').RequestHandler} */
+    async (req, res) => {
+        try {
+            const { jobTitle, location } = /** @type {{ jobTitle: string; location?: string }} */ (req.body);
+
+            if (!jobTitle?.trim()) {
+                res.status(400).json({ success: false, message: 'jobTitle is required' });
+                return;
+            }
+
+            const apiKey = process.env.BRIGHTDATA_SERP_KEY || '';
+            if (!apiKey) {
+                res.status(500).json({ success: false, message: 'Bright Data SERP key not configured. Set it in API Keys → Integrations.' });
+                return;
+            }
+
+            const profiles = await searchLinkedInProfiles(jobTitle.trim(), location?.trim() ?? '', apiKey);
+            console.log('[linkedin-search] profiles found:', profiles.length);
+            res.json({ success: true, data: { profiles } });
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'LinkedIn search failed';
+            const axiosResp = /** @type {Record<string, unknown>} */ (err)?.response;
+            if (axiosResp) console.error('[linkedin-search] axios response:', JSON.stringify(/** @type {Record<string, unknown>} */ (axiosResp)?.data ?? /** @type {Record<string, unknown>} */ (axiosResp)?.status));
+            console.error('POST /api/prospect/linkedin-search error:', message);
+            res.status(500).json({ success: false, message });
+        } finally {
+            console.debug('POST /api/prospect/linkedin-search completed');
+        }
+    }
+);
 
 module.exports = router;

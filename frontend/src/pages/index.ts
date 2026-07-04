@@ -4,6 +4,8 @@
  */
 
 export { LoginPage } from './LoginPage';
+export { RegisterPage } from './RegisterPage';
+export { PendingApprovalPage } from './PendingApprovalPage';
 export { DashboardPage } from './DashboardPage';
 export { NotFoundPage } from './NotFoundPage';
 export { APIKeyPage } from './APIKeyPage';

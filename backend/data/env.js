@@ -103,6 +103,11 @@ const MAX_CSV_SIZE_MB = getEnvVar('MAX_CSV_SIZE_MB', '100', false);
 const MX_DOMAIN = getEnvVar('MX_DOMAIN', '', false);
 const EM_DOMAIN = getEnvVar('EM_DOMAIN', '', false);
 
+// Third-party scraping integrations
+
+const BRIGHTDATA_API_KEY = getEnvVar('BRIGHTDATA_API_KEY', '', false);
+const BRIGHTDATA_SERP_KEY = getEnvVar('BRIGHTDATA_SERP_KEY', '', false);
+
 /**
  * Validates all required environment variables
  * @returns {boolean} True if all required variables are present
@@ -166,6 +171,10 @@ module.exports = {
 	// Email verification
 	MX_DOMAIN,
 	EM_DOMAIN,
+
+	// Integrations
+	BRIGHTDATA_API_KEY,
+	BRIGHTDATA_SERP_KEY,
 
 	// Utilities
 	getEnvVar,

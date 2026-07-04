@@ -466,7 +466,7 @@ async function uploadCSV(req, res) {
  */
 async function submitCSVVerification(req, res) {
 	try {
-		const { csv_upload_id, email_column_index } = req.body;
+		const { csv_upload_id, email_column_index, field_mapping } = req.body;
 
 		if (!csv_upload_id || email_column_index === undefined) {
 			return res.status(400).json({
@@ -493,6 +493,11 @@ async function submitCSVVerification(req, res) {
 		const headers = JSON.parse(upload.headers);
 		const selectedColumn = headers[email_column_index];
 
+		// Parse field_mapping: { first_name: colIndex, last_name: colIndex, ... }
+		/** @type {Record<string, number>} */
+		const mapping = field_mapping && typeof field_mapping === 'object' ? field_mapping : {};
+		const ALLOWED_CONTACT_FIELDS = ['first_name', 'last_name', 'phone', 'linkedin_url', 'job_title', 'company_name'];
+
 		// Update selected column in database (user might have changed it from auto-detected)
 		const columnUpdateTime = Date.now();
 		const updateColumnStmt = db.prepare(`
@@ -510,8 +515,10 @@ async function submitCSVVerification(req, res) {
 		let rowIndex = 0;
 		/** @type {string[]} */
 		const emails = [];
+		/** @type {Record<string, Record<string, string>>} */
+		const contactData = {};
 
-		// Stream parse and extract emails
+		// Stream parse and extract emails + mapped contact fields
 		await new Promise((resolve, reject) => {
 			Papa.parse(stream, {
 				header: false, // Manual parsing to avoid dot issues
@@ -528,7 +535,21 @@ async function submitCSVVerification(req, res) {
 					const email = row[email_column_index];
 
 					if (email && email.trim()) {
-						emails.push(email.trim());
+						const trimmedEmail = email.trim();
+						emails.push(trimmedEmail);
+
+						// Extract mapped contact fields for this row
+						const contact = /** @type {Record<string, string>} */ ({});
+						for (const field of ALLOWED_CONTACT_FIELDS) {
+							const colIdx = mapping[field];
+							if (colIdx !== undefined && colIdx !== null) {
+								const val = row[Number(colIdx)];
+								if (val && val.trim()) contact[field] = val.trim();
+							}
+						}
+						if (Object.keys(contact).length > 0) {
+							contactData[trimmedEmail] = contact;
+						}
 					}
 
 					rowIndex++;
@@ -537,6 +558,12 @@ async function submitCSVVerification(req, res) {
 				error: reject,
 			});
 		});
+
+		// Persist contact data so saveValidEmails can use it after verification
+		if (Object.keys(contactData).length > 0) {
+			db.prepare('UPDATE csv_uploads SET contact_data = ?, updated_at = ? WHERE csv_upload_id = ?')
+				.run(JSON.stringify(contactData), Date.now(), csv_upload_id);
+		}
 
 		// Generate verification request ID
 		const verification_request_id = `csv-${uuidv4()}`;

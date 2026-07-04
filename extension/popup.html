@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BrandNav Prospector</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            width: 340px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 13px;
+            background: #0f172a;
+            color: #e2e8f0;
+        }
+
+        .header {
+            background: #1e293b;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid #334155;
+        }
+
+        .header span { font-weight: 600; font-size: 14px; color: #f1f5f9; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; }
+
+        .body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+        .field { display: flex; flex-direction: column; gap: 4px; }
+        .field label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+        .field .value {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            padding: 8px 10px;
+            color: #f1f5f9;
+            font-size: 13px;
+            min-height: 34px;
+        }
+        .field .value.empty { color: #475569; font-style: italic; }
+
+        .btn {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.15s;
+        }
+        .btn:hover { opacity: 0.85; }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-success { background: #22c55e; color: white; }
+
+        .status {
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            text-align: center;
+            display: none;
+        }
+        .status.show { display: block; }
+        .status.loading { background: #1e40af22; color: #93c5fd; border: 1px solid #1e40af; }
+        .status.success { background: #14532d22; color: #86efac; border: 1px solid #14532d; }
+        .status.error { background: #7f1d1d22; color: #fca5a5; border: 1px solid #7f1d1d; }
+
+        .not-linkedin {
+            padding: 32px 16px;
+            text-align: center;
+            color: #64748b;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .config { padding: 12px 16px; border-top: 1px solid #1e293b; }
+        .config input {
+            width: 100%;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            padding: 6px 10px;
+            color: #f1f5f9;
+            font-size: 12px;
+        }
+        .config label { font-size: 11px; color: #64748b; display: block; margin-bottom: 4px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="dot"></div>
+        <span>BrandNav Prospector</span>
+    </div>
+
+    <div id="not-linkedin" class="not-linkedin" style="display:none">
+        Open a LinkedIn profile page<br/>to use this extension.
+    </div>
+
+    <div id="main" style="display:none">
+        <div class="body">
+            <div class="field">
+                <label>Name</label>
+                <div class="value" id="f-name">—</div>
+            </div>
+            <div class="field">
+                <label>Job Title</label>
+                <div class="value" id="f-title">—</div>
+            </div>
+            <div class="field">
+                <label>Company</label>
+                <div class="value" id="f-company">—</div>
+            </div>
+            <div class="field">
+                <label>Domain Found</label>
+                <div class="value empty" id="f-domain">not searched yet</div>
+            </div>
+            <div class="field">
+                <label>Email Found</label>
+                <div class="value empty" id="f-email">not searched yet</div>
+            </div>
+
+            <div class="status" id="status"></div>
+
+            <button class="btn btn-primary" id="btn-find">Find Email</button>
+            <button class="btn btn-success" id="btn-save" style="display:none">Save to BrandNav</button>
+        </div>
+    </div>
+
+    <div class="config">
+        <label>Backend URL</label>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+            <button id="btn-local" style="flex:1;padding:4px 8px;background:#1e293b;border:1px solid #334155;border-radius:5px;color:#94a3b8;font-size:11px;cursor:pointer">localhost:5000</button>
+            <button id="btn-prod" style="flex:1;padding:4px 8px;background:#1e293b;border:1px solid #334155;border-radius:5px;color:#94a3b8;font-size:11px;cursor:pointer">production</button>
+        </div>
+        <input type="text" id="backend-url" placeholder="http://localhost:5000" />
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

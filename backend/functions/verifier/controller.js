@@ -551,7 +551,7 @@ class Controller {
 
 					// Derive source type from request_id prefix (single-*, csv-*, api-*)
 					const source = request_id.startsWith('csv-') ? 'csv' : request_id.startsWith('api-') ? 'api' : 'single';
-					saveValidEmails(transformedResults, source);
+					saveValidEmails(transformedResults, source, { requestId: request_id });
 				} catch (error) {
 					this.logger.error(`Failed to sync results to verification_requests: ${error?.toString()}`);
 				}

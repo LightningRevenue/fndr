@@ -77,7 +77,7 @@ export function BulkCSVVerificationPage() {
     /**
      * Handle verification submission
      */
-    const handleVerify = async (selectedColumn: string) => {
+    const handleVerify = async (selectedColumn: string, fieldMapping: Record<string, number>) => {
         try {
             if (!csvData) {
                 throw new Error('No CSV data available');
@@ -95,7 +95,8 @@ export function BulkCSVVerificationPage() {
             // Submit to backend API
             const verificationResponse = await verificationApi.submitCSVVerification(
                 csvData.csvUploadId,
-                columnIndex
+                columnIndex,
+                fieldMapping
             );
 
             // Clear stored data after successful submission

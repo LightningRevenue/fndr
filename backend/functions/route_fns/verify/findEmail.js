@@ -251,7 +251,7 @@ async function findEmail(req, res) {
                 send('attempt', { email, status, reason, pattern: email.split('@')[0] });
 
                 if (status === 'valid') {
-                    saveValidEmails([{ email, status: 'valid', message: reason }], 'single');
+                    saveValidEmails([{ email, status: 'valid', message: reason }], 'single', { firstName, lastName });
                     send('found', { email, status, reason });
                     foundValid = true;
                     break;
@@ -288,7 +288,7 @@ async function findEmail(req, res) {
                 send('attempt', { email, status, reason, pattern });
 
                 if (status === 'valid') {
-                    saveValidEmails([{ email, status: 'valid', message: reason }], 'single');
+                    saveValidEmails([{ email, status: 'valid', message: reason }], 'single', { firstName, lastName });
                     send('found', { email, status, reason });
                     foundValid = true;
                 }

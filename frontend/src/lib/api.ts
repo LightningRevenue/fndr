@@ -42,6 +42,7 @@ export interface GenericApiResponse {
  */
 export interface UserInfo {
     email: string;
+    is_admin: boolean;
 }
 
 /**
@@ -127,6 +128,28 @@ export const authApi = {
             throw new Error(formatErrorMessage(message, statusCode));
         } finally {
             // Debug logging omitted for production
+        }
+    },
+
+    /**
+     * Register a new user account
+     */
+    async register(email: string, password: string): Promise<{ status: 'approved' | 'pending'; message: string }> {
+        try {
+            const response = await axiosPost<{ success: boolean; status: 'approved' | 'pending'; message: string }>(
+                `${config.api.baseUrl}/api/auth/register`,
+                { email, password }
+            );
+            if (!response.success || !response.data) {
+                const error = new Error(response.error instanceof Error ? response.error.message : response.error || 'Registration failed');
+                (error as any).status = response.status;
+                throw error;
+            }
+            return { status: response.data.status, message: response.data.message };
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Registration failed';
+            const statusCode = (error as any)?.status;
+            throw new Error(formatErrorMessage(message, statusCode));
         }
     },
 
@@ -448,7 +471,7 @@ export const verificationApi = {
      * @returns {Promise<CSVVerificationResponse>} Promise resolving to verification start confirmation
      * @throws {Error} If submission fails
      */
-    async submitCSVVerification(csvUploadId: string, emailColumnIndex: number): Promise<CSVVerificationResponse> {
+    async submitCSVVerification(csvUploadId: string, emailColumnIndex: number, fieldMapping: Record<string, number> = {}): Promise<CSVVerificationResponse> {
         try {
             const response = await axiosPost<{
                 success: boolean;
@@ -462,7 +485,7 @@ export const verificationApi = {
                 }
             }>(
                 `${config.api.baseUrl}/api/verifier/csv/verify`,
-                { csv_upload_id: csvUploadId, email_column_index: emailColumnIndex }
+                { csv_upload_id: csvUploadId, email_column_index: emailColumnIndex, field_mapping: fieldMapping }
             );
 
             if (!response.success || !response.data) {
@@ -725,6 +748,18 @@ export interface ValidEmailEntry {
     domain: string;
     source: 'single' | 'csv' | 'api';
     verified_at: number;
+    email_status: 'valid' | 'catch_all';
+    first_name:     string | null;
+    last_name:      string | null;
+    personal_email: string | null;
+    job_title:      string | null;
+    company_name:   string | null;
+    linkedin_url:   string | null;
+    phone:          string | null;
+    city:           string | null;
+    country:        string | null;
+    tags:           string | null;
+    notes:          string | null;
 }
 
 export interface ValidEmailsDomain {
@@ -742,10 +777,11 @@ export interface ValidEmailsResponse {
 }
 
 export const validEmailsApi = {
-    async getValidEmails(page = 1, perPage = 50, domain: string | null = null): Promise<ValidEmailsResponse['data']> {
+    async getValidEmails(page = 1, perPage = 50, domain: string | null = null, emailStatus: string | null = null): Promise<ValidEmailsResponse['data']> {
         try {
             const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
             if (domain) params.set('domain', domain);
+            if (emailStatus) params.set('email_status', emailStatus);
 
             const response = await axiosGet<ValidEmailsResponse>(
                 `${config.api.baseUrl}/api/verifier/valid-emails?${params.toString()}`
@@ -761,6 +797,92 @@ export const validEmailsApi = {
             throw new Error(formatErrorMessage(errorMessage));
         } finally {
             // no-op
+        }
+    },
+
+    async savePersonalEmail(workEmail: string, personalEmail: string): Promise<void> {
+        try {
+            await fetch(`${config.api.baseUrl}/api/verifier/valid-emails/${encodeURIComponent(workEmail)}/personal`, {
+                method: 'PATCH',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ personal_email: personalEmail }),
+            });
+        } catch (_) { /* ignore */ } finally {
+            // no-op
+        }
+    },
+
+    async updateContact(email: string, fields: Partial<Pick<ValidEmailEntry, 'personal_email' | 'job_title' | 'company_name' | 'linkedin_url' | 'phone' | 'city' | 'country' | 'tags' | 'notes' | 'first_name' | 'last_name'>>): Promise<void> {
+        try {
+            await fetch(`${config.api.baseUrl}/api/verifier/valid-emails/${encodeURIComponent(email)}/contact`, {
+                method: 'PATCH',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(fields),
+            });
+        } catch (_) { /* ignore */ } finally {
+            // no-op
+        }
+    },
+
+    async getDomainDescription(domain: string): Promise<string> {
+        try {
+            const response = await axiosGet<{ success: boolean; data: { description: string } }>(
+                `${config.api.baseUrl}/api/verifier/domain-description?domain=${encodeURIComponent(domain)}`
+            );
+            return response.data?.data?.description ?? '';
+        } catch (_) {
+            return '';
+        } finally {
+            // no-op
+        }
+    },
+};
+
+
+// Admin user management
+
+export interface PendingUser {
+    id: number;
+    email: string;
+    status: 'pending' | 'approved';
+    is_admin: number;
+    created_at: string;
+}
+
+export const adminApi = {
+    async getPendingUsers(): Promise<PendingUser[]> {
+        try {
+            const response = await axiosGet<{ success: boolean; data: { users: PendingUser[] } }>(
+                `${config.api.baseUrl}/api/auth/pending-users`
+            );
+            if (!response.success || !response.data) throw new Error('Failed to load pending users');
+            return response.data.data.users;
+        } catch (error) {
+            throw new Error(error instanceof Error ? error.message : 'Failed to load pending users');
+        }
+    },
+
+    async approveUser(id: number): Promise<void> {
+        try {
+            const response = await axiosPost<{ success: boolean }>(
+                `${config.api.baseUrl}/api/auth/approve/${id}`, {}
+            );
+            if (!response.success) throw new Error('Failed to approve user');
+        } catch (error) {
+            throw new Error(error instanceof Error ? error.message : 'Failed to approve user');
+        }
+    },
+
+    async rejectUser(id: number): Promise<void> {
+        try {
+            const response = await axiosPost<{ success: boolean }>(
+                `${config.api.baseUrl}/api/auth/reject/${id}`, {}
+            );
+            if (!response.success) throw new Error('Failed to reject user');
+        } catch (error) {
+            throw new Error(error instanceof Error ? error.message : 'Failed to reject user');
         }
     },
 };

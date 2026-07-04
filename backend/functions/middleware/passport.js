@@ -1,6 +1,6 @@
 /**
- * Passport.js configuration for single-user authentication
- * Uses LocalStrategy with credentials from environment variables
+ * Passport.js configuration — authenticates against the users DB table.
+ * Falls back to env ADMIN_EMAIL/ADMIN_PASSWORD for backwards-compat if no users exist yet.
  */
 
 const passport = require('passport');
@@ -8,79 +8,66 @@ const LocalStrategy = require('passport-local').Strategy;
 const bcrypt = require('bcryptjs');
 const { ADMIN_EMAIL, ADMIN_PASSWORD } = require('../../data/env');
 
-/**
- * Configure Passport LocalStrategy
- * Validates email and password against environment variables
- */
 passport.use(
 	new LocalStrategy(
-		{
-			usernameField: 'email',
-			passwordField: 'password',
-		},
+		{ usernameField: 'email', passwordField: 'password' },
 		async (email, password, done) => {
 			try {
-				// Validate email matches admin email
-				if (email !== ADMIN_EMAIL) {
+				// Lazy-require to avoid circular init at module load time
+				const { getDb } = require('../../database/connection');
+				const db = getDb();
+
+				/** @type {{ id: number, email: string, password_hash: string, status: string, is_admin: number } | undefined} */
+				const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase());
+
+				if (!user) {
+					// Legacy fallback: env-based admin when no users table row exists
+					if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+						return done(null, { email: ADMIN_EMAIL, is_admin: true });
+					}
 					return done(null, false, { message: 'Incorrect email or password. Please check your credentials and try again.' });
 				}
 
-				// Validate password matches admin password
-				if (password !== ADMIN_PASSWORD) {
+				const match = await bcrypt.compare(password, user.password_hash);
+				if (!match) {
 					return done(null, false, { message: 'Incorrect email or password. Please check your credentials and try again.' });
 				}
 
-				// Authentication successful - return user object
-				const user = {
-					email: ADMIN_EMAIL,
-				};
+				if (user.status === 'pending') {
+					return done(null, false, { message: 'Your account is pending approval. Please wait for an admin to approve your account.' });
+				}
 
-				return done(null, user);
+				return done(null, { email: user.email, is_admin: Boolean(user.is_admin) });
+
 			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error);
-				console.error('Passport authentication error:', errorMessage);
+				console.error('Passport authentication error:', String(error));
 				return done(error);
-			} finally {
-				console.debug('Passport authentication process completed');
 			}
 		}
 	)
 );
 
-/**
- * Serialize user to session
- * Stores minimal user data in session
- */
 passport.serializeUser((user, done) => {
 	try {
-		// Store only email in session
 		done(null, user.email);
 	} catch (error) {
-		const errorMessage = error instanceof Error ? error.message : String(error);
-		console.error('Session serialization error:', errorMessage);
 		done(error);
-	} finally {
-		console.debug('User serialized to session');
 	}
 });
 
-/**
- * Deserialize user from session
- * Reconstructs user object from session data
- */
 passport.deserializeUser((email, done) => {
 	try {
-		// Reconstruct user object
-		const user = {
-			email: email,
-		};
-		done(null, user);
+		const { getDb } = require('../../database/connection');
+		const db = getDb();
+		const row = db.prepare('SELECT email, is_admin FROM users WHERE email = ?').get(email);
+		if (row) {
+			done(null, { email: row.email, is_admin: Boolean(row.is_admin) });
+		} else {
+			// Legacy env-admin session
+			done(null, { email, is_admin: email === ADMIN_EMAIL });
+		}
 	} catch (error) {
-		const errorMessage = error instanceof Error ? error.message : String(error);
-		console.error('Session deserialization error:', errorMessage);
 		done(error);
-	} finally {
-		console.debug('User deserialized from session');
 	}
 });
 

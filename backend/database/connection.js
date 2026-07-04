@@ -122,7 +122,10 @@ function createTables(db) {
                 email TEXT PRIMARY KEY,
                 domain TEXT NOT NULL,
                 source TEXT CHECK(source IN ('single', 'csv', 'api')) NOT NULL,
-                verified_at INTEGER NOT NULL
+                verified_at INTEGER NOT NULL,
+                first_name TEXT,
+                last_name TEXT,
+                personal_email TEXT
             )
         `);
 
@@ -131,6 +134,33 @@ function createTables(db) {
 		createCsvUploadsTable.run();
 		createApiKeysTable.run();
 		createValidEmailsTable.run();
+
+		// Migration: add new columns to valid_emails if upgrading from older schema
+		[
+			'first_name TEXT', 'last_name TEXT', 'personal_email TEXT',
+			'job_title TEXT', 'company_name TEXT', 'linkedin_url TEXT',
+			'phone TEXT', 'city TEXT', 'country TEXT', 'tags TEXT', 'notes TEXT',
+		].forEach(col => {
+			try { db.prepare(`ALTER TABLE valid_emails ADD COLUMN ${col}`).run(); } catch (_) { /* already exists */ }
+		});
+
+		// Migration: add contact_data column to csv_uploads for field mapping storage
+		try { db.prepare('ALTER TABLE csv_uploads ADD COLUMN contact_data TEXT').run(); } catch (_) { /* already exists */ }
+
+		// Migration: add email_status to valid_emails to distinguish valid vs catch-all
+		try { db.prepare("ALTER TABLE valid_emails ADD COLUMN email_status TEXT DEFAULT 'valid'").run(); } catch (_) { /* already exists */ }
+
+		// Users table for multi-user auth with approval flow
+		db.prepare(`
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                status TEXT CHECK(status IN ('pending', 'approved')) DEFAULT 'pending',
+                is_admin INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `).run();
 
 		// Create indexes for better performance
 		const createCsvVerificationIndex = db.prepare(
